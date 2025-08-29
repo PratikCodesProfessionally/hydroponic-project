@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydroponic Master Control</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🌱 Hydroponic Control Center</h1>
+        <div id="connection-status" class="connection-badge offline">Disconnected</div>
+    </header>
+
+    <main class="dashboard">
+        <!-- System Overview Card -->
+        <div class="card overview-card">
+            <h2><span class="icon">📊</span> System Overview</h2>
+            <div class="status-grid">
+                <div class="metric">
+                    <div class="metric-value" id="temperature">--°C</div>
+                    <div class="metric-label">Water Temp</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="ph-level">--</div>
+                    <div class="metric-label">pH Level</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="water-level">--%</div>
+                    <div class="metric-label">Tank Level</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NPK Nutrients Card -->
+        <div class="card npk-card">
+            <h2><span class="icon">🧪</span> Nutrient Control</h2>
+            <div class="nutrient-controls">
+                <!-- Nitrogen Control -->
+                <div class="nutrient-panel">
+                    <h3>Nitrogen (N)</h3>
+                    <div class="nutrient-value" id="n-value">-- ppm</div>
+                    <input type="range" min="0" max="200" value="100" class="nutrient-slider" id="n-slider">
+                    <button class="dose-btn" id="n-dose">Dose 5ml</button>
+                </div>
+                
+                <!-- Phosphorus Control -->
+                <div class="nutrient-panel">
+                    <h3>Phosphorus (P)</h3>
+                    <div class="nutrient-value" id="p-value">-- ppm</div>
+                    <input type="range" min="0" max="150" value="50" class="nutrient-slider" id="p-slider">
+                    <button class="dose-btn" id="p-dose">Dose 3ml</button>
+                </div>
+                
+                <!-- Potassium Control -->
+                <div class="nutrient-panel">
+                    <h3>Potassium (K)</h3>
+                    <div class="nutrient-value" id="k-value">-- ppm</div>
+                    <input type="range" min="0" max="250" value="150" class="nutrient-slider" id="k-slider">
+                    <button class="dose-btn" id="k-dose">Dose 7ml</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Environmental Controls -->
+        <div class="card env-card">
+            <h2><span class="icon">🌡️</span> Environment</h2>
+            <div class="control-group">
+                <div class="control-item">
+                    <label>Water Temp Target</label>
+                    <div class="setpoint-display" id="temp-setpoint">22°C</div>
+                    <input type="range" min="18" max="30" value="22" class="control-slider" id="temp-slider">
+                </div>
+                
+                <div class="control-item">
+                    <label>pH Target</label>
+                    <div class="setpoint-display" id="ph-setpoint">6.0</div>
+                    <input type="range" min="5.0" max="7.0" step="0.1" value="6.0" class="control-slider" id="ph-slider">
+                </div>
+                
+                <div class="control-item">
+                    <label>Grow Lights</label>
+                    <label class="switch">
+                        <input type="checkbox" id="light-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <div id="light-status" class="status-text">OFF</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

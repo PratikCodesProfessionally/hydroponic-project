@@ -1,0 +1,212 @@
+:root {
+    --primary: #4CAF50;
+    --secondary: #2196F3;
+    --danger: #F44336;
+    --warning: #FFC107;
+    --dark: #333;
+    --light: #f9f9f9;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Roboto', sans-serif;
+}
+
+body {
+    background-color: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+    padding: 20px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+h1 {
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 25px;
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card h2 {
+    color: var(--dark);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.icon {
+    font-size: 1.2em;
+}
+
+/* Status Badges */
+.connection-badge {
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.online {
+    background-color: var(--primary);
+    color: white;
+}
+
+.offline {
+    background-color: var(--danger);
+    color: white;
+}
+
+/* Nutrient Controls */
+.npk-card {
+    grid-column: span 2;
+}
+
+.nutrient-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.nutrient-panel {
+    background: rgba(233, 245, 255, 0.5);
+    padding: 15px;
+    border-radius: 10px;
+    border-left: 4px solid var(--secondary);
+}
+
+.nutrient-value {
+    font-size: 2rem;
+    font-weight: 500;
+    margin: 10px 0;
+    color: var(--secondary);
+}
+
+.nutrient-slider {
+    width: 100%;
+    margin: 15px 0;
+    accent-color: var(--secondary);
+}
+
+.dose-btn {
+    background: var(--secondary);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s;
+    width: 100%;
+}
+
+.dose-btn:hover {
+    background: #0d8bf2;
+}
+
+/* System Overview */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+.metric {
+    text-align: center;
+    padding: 15px;
+    background: rgba(76, 175, 80, 0.1);
+    border-radius: 8px;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 500;
+    color: var(--primary);
+}
+
+.metric-label {
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: var(--primary);
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+.status-text {
+    margin-top: 5px;
+    font-weight: 500;
+}
