@@ -26,21 +26,28 @@ ws.onclose = () => {
 // Message Handling
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
+
+    const formatValue = (value, suffix = '') => {
+        if (value === null || value === undefined || value === '') {
+            return `--${suffix}`;
+        }
+        return `${value}${suffix}`;
+    };
     
     // Update sensor readings
     if (data.type === 'sensorData') {
-        document.getElementById('temperature').textContent = `${data.temperature}°C`;
-        document.getElementById('ph-level').textContent = data.ph;
-        document.getElementById('water-level').textContent = `${data.waterLevel}%`;
+        document.getElementById('temperature').textContent = formatValue(data.temperature, '°C');
+        document.getElementById('ph-level').textContent = formatValue(data.ph);
+        document.getElementById('water-level').textContent = formatValue(data.waterLevel, '%');
         
         // Update NPK values
-        nValue.textContent = `${data.nitrogen} ppm`;
-        pValue.textContent = `${data.phosphorus} ppm`;
-        kValue.textContent = `${data.potassium} ppm`;
+        nValue.textContent = formatValue(data.nitrogen, ' ppm');
+        pValue.textContent = formatValue(data.phosphorus, ' ppm');
+        kValue.textContent = formatValue(data.potassium, ' ppm');
         
         // Update light status
-        lightToggle.checked = data.lightsOn;
-        lightStatus.textContent = data.lightsOn ? "ON" : "OFF";
+        lightToggle.checked = Boolean(data.lightsOn);
+        lightStatus.textContent = Boolean(data.lightsOn) ? "ON" : "OFF";
     }
 };
 
