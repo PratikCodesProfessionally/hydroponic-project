@@ -9,6 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const PI_API_BASE_URL = process.env.PI_API_BASE_URL;
+const PI_SENSOR_POLL_INTERVAL_MS = Number(process.env.PI_SENSOR_POLL_INTERVAL_MS || 2000);
 
 let latestSensorData = {
     type: 'sensorData',
@@ -47,8 +48,12 @@ function normalizeSensorData(payload = {}) {
             // UI zeigt aktuell "Water Temp", daher priorisieren wir wasser_temp.
             temperature: toNumber(payload.wasser_temp ?? payload.luft_temp),
             ph: toNumber(payload.ph),
-            // Wenn kein Tank-Fuellstand vorhanden ist, bleibt der letzte bekannte Wert erhalten.
-            waterLevel: toNumber(payload.water_level ?? payload.waterLevel ?? latestSensorData.waterLevel),
+            // Feuchtigkeit aus dem Pi-API-Shape wird als Füllstand/Feuchte-Wert für die UI genutzt.
+            waterLevel: toNumber(payload.water_level ?? payload.waterLevel ?? payload.feuchtigkeit ?? latestSensorData.waterLevel),
+            nitrogen: toNumber(payload.nitrogen ?? latestSensorData.nitrogen),
+            phosphorus: toNumber(payload.phosphorus ?? latestSensorData.phosphorus),
+            potassium: toNumber(payload.potassium ?? latestSensorData.potassium),
+            lightsOn: Boolean(payload.lightsOn ?? payload.pumpe ?? latestSensorData.lightsOn),
             timestamp: payload.timestamp ?? new Date().toISOString()
         };
     }
@@ -110,6 +115,26 @@ function broadcastToClients(data) {
     });
 }
 
+async function syncSensorDataFromPi() {
+    if (!PI_API_BASE_URL) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${PI_API_BASE_URL}/api/sensors`);
+        if (!response.ok) {
+            console.warn(`Pi sensor API returned ${response.status}`);
+            return;
+        }
+
+        const data = await response.json();
+        latestSensorData = normalizeSensorData(data);
+        broadcastToClients(JSON.stringify(latestSensorData));
+    } catch (error) {
+        console.warn('Pi sensor API unreachable:', error.message);
+    }
+}
+
 // REST API Endpoints
 app.post('/api/sensor-data', (req, res) => {
     latestSensorData = normalizeSensorData(req.body);
@@ -149,6 +174,11 @@ app.post('/api/pump/:action', async (req, res) => {
     broadcastToClients(JSON.stringify({ type: 'pumpControl', action }));
     res.json({ status: 'ok', mode: 'ws-only', action });
 });
+
+if (PI_API_BASE_URL) {
+    syncSensorDataFromPi();
+    setInterval(syncSensorDataFromPi, PI_SENSOR_POLL_INTERVAL_MS);
+}
 
 // Start server
 const PORT = process.env.PORT || 3000;
