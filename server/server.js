@@ -20,8 +20,9 @@ const PUMP_MAX_SECONDS = Number(process.env.PUMP_MAX_SECONDS || 10);
 const PH_TARGET = Number(process.env.PH_TARGET || 5.8);
 const PH_TOLERANCE = Number(process.env.PH_TOLERANCE || 0.2);
 
-// Verlauf fuer das Diagramm, damit nach einem Reload nicht bei null begonnen wird.
-const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 120);
+// Verlauf fuer Diagramm und CSV-Export. 43200 Eintraege entsprechen bei
+// 2-s-Takt rund 24 Stunden; das Diagramm zeigt davon die letzten 120.
+const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 43200);
 const history = [];
 
 let latest = {
@@ -99,7 +100,11 @@ function remember(reading) {
     history.push({
         timestamp: reading.timestamp,
         ph: reading.ph,
-        phVoltage: reading.phVoltage
+        phVoltage: reading.phVoltage,
+        waterTemp: reading.waterTemp,
+        airTemp: reading.airTemp,
+        airHumidity: reading.airHumidity,
+        pumpActive: reading.pumpActive
     });
     if (history.length > HISTORY_LIMIT) {
         history.shift();
@@ -170,7 +175,34 @@ app.post('/api/sensors', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-app.get('/api/history', (req, res) => res.json(history));
+// Fuer das Diagramm reichen die letzten Punkte; der volle Puffer waere
+// bei 24 h Laufzeit mehrere Megabyte je Seitenaufruf.
+app.get('/api/history', (req, res) => {
+    const limit = Math.max(1, Number(req.query.limit) || 120);
+    res.json(history.slice(-limit));
+});
+
+/**
+ * CSV-Export des gesamten Verlaufspuffers.
+ *
+ * Die Spaltennamen entsprechen dem Log des Pi (hydroponik_log.csv),
+ * damit tools/plot_messreihe.py die Datei direkt einlesen kann.
+ */
+app.get('/api/export.csv', (req, res) => {
+    const kopf = 'timestamp,ph,ph_spannung,wasser_temp,luft_temp,luft_feuchte,pumpe';
+    const zeilen = history.map(punkt =>
+        [punkt.timestamp, punkt.ph, punkt.phVoltage, punkt.waterTemp,
+         punkt.airTemp, punkt.airHumidity, punkt.pumpActive]
+            .map(wert => (wert === null || wert === undefined) ? '' : String(wert))
+            .join(','));
+
+    const stempel = (history[history.length - 1]?.timestamp || '')
+        .replace(/[: ]/g, '-') || 'leer';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition',
+        `attachment; filename="messwerte_${stempel}.csv"`);
+    res.send([kopf, ...zeilen].join('\n') + '\n');
+});
 
 /**
  * Peristaltikpumpe (pH-Minus).

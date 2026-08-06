@@ -369,6 +369,95 @@ function drawTable() {
     });
 }
 
+// ==================================================================
+//   Export: CSV vom Server, Diagramm als PNG
+// ==================================================================
+
+document.getElementById('csv-export').addEventListener('click', () => {
+    // Content-Disposition des Servers loest den Download aus,
+    // die Seite bleibt dabei stehen.
+    window.location.href = '/api/export.csv';
+});
+
+/**
+ * Rastert das SVG-Diagramm in ein PNG.
+ *
+ * Die Farben und Linienstaerken stehen im Stylesheet, nicht im SVG -
+ * beim Serialisieren gingen sie verloren und das Bild waere leer.
+ * Deshalb werden die berechneten Stile vorher elementweise auf einen
+ * Klon uebertragen.
+ */
+async function erzeugeDiagrammPng() {
+    const klon = chart.cloneNode(true);
+    const originale = chart.querySelectorAll('*');
+    const kopien = klon.querySelectorAll('*');
+    const EIGENSCHAFTEN = [
+        'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+        'opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor',
+        'paint-order', 'font-variant-numeric'
+    ];
+    originale.forEach((element, index) => {
+        const stil = getComputedStyle(element);
+        let css = '';
+        for (const eigenschaft of EIGENSCHAFTEN) {
+            const wert = stil.getPropertyValue(eigenschaft);
+            if (wert) {
+                css += `${eigenschaft}:${wert};`;
+            }
+        }
+        kopien[index].setAttribute('style', css);
+    });
+
+    const breite = chart.clientWidth;
+    const hoehe = chart.clientHeight;
+    klon.setAttribute('xmlns', SVG_NS);
+    klon.setAttribute('width', breite);
+    klon.setAttribute('height', hoehe);
+
+    // Hintergrund in Flaechenfarbe, sonst wird das PNG transparent.
+    const flaeche = getComputedStyle(document.documentElement)
+        .getPropertyValue('--surface').trim() || '#ffffff';
+    const hintergrund = document.createElementNS(SVG_NS, 'rect');
+    hintergrund.setAttribute('width', '100%');
+    hintergrund.setAttribute('height', '100%');
+    hintergrund.setAttribute('fill', flaeche);
+    klon.insertBefore(hintergrund, klon.firstChild);
+
+    const svgText = new XMLSerializer().serializeToString(klon);
+    const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
+    try {
+        const bild = new Image();
+        await new Promise((geladen, fehler) => {
+            bild.onload = geladen;
+            bild.onerror = fehler;
+            bild.src = url;
+        });
+        // doppelte Aufloesung, damit das PNG im Dokument scharf bleibt
+        const leinwand = document.createElement('canvas');
+        leinwand.width = breite * 2;
+        leinwand.height = hoehe * 2;
+        leinwand.getContext('2d').drawImage(bild, 0, 0, leinwand.width, leinwand.height);
+        return leinwand.toDataURL('image/png');
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+document.getElementById('png-export').addEventListener('click', async () => {
+    if (!history.length) {
+        return;                          // leeres Diagramm, nichts zu speichern
+    }
+    focusIndex = null;                   // Fadenkreuz nicht mit exportieren
+    drawChart();
+
+    const dataUrl = await erzeugeDiagrammPng();
+    const link = document.createElement('a');
+    const stempel = (current?.timestamp || 'export').replace(/[: ]/g, '-');
+    link.href = dataUrl;
+    link.download = `ph-verlauf_${stempel}.png`;
+    link.click();
+});
+
 tableToggle.addEventListener('click', () => {
     tableView.hidden = !tableView.hidden;
     tableToggle.setAttribute('aria-expanded', String(!tableView.hidden));

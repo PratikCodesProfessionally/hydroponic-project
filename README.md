@@ -49,7 +49,8 @@ Der Node-Server hat vier Aufgaben:
 | Methode | Pfad | Zweck |
 | --- | --- | --- |
 | GET | `/api/sensors` | letzter bekannter Zustand als JSON |
-| GET | `/api/history` | pH-Verlauf für das Diagramm |
+| GET | `/api/history` | pH-Verlauf für das Diagramm (`?limit=…`, Standard 120) |
+| GET | `/api/export.csv` | gesamten Verlaufspuffer als CSV herunterladen |
 | POST | `/api/sensors` | Zustand von außen setzen (Push statt Poll) |
 | POST | `/api/pump/dose` | `{ "seconds": 2 }` → zeitbegrenzter Pumpenlauf am Pi |
 | POST | `/api/pump/stop` | Not-Aus der Pumpe |
@@ -67,14 +68,14 @@ nur zeitbegrenzte Läufe, damit die Pumpe bei einem Verbindungsabbruch stoppt.
 | `PI_SENSOR_POLL_INTERVAL_MS` | `2000` | Abfrageintervall zum Pi |
 | `PUMP_MAX_SECONDS` | `10` | Obergrenze je Pumpenlauf (der Pi begrenzt zusätzlich) |
 | `PH_TARGET` / `PH_TOLERANCE` | `5.8` / `0.2` | Zielbereich, falls der Pi ihn nicht mitliefert |
-| `HISTORY_LIMIT` | `120` | Punkte im Verlaufsdiagramm |
+| `HISTORY_LIMIT` | `43200` | Größe des Verlaufspuffers (≈ 24 h bei 2-s-Takt); Diagramm zeigt die letzten 120 |
 
 ### public/ – das Dashboard
 
 | Element | Funktion |
 | --- | --- |
 | Aktueller pH-Wert | Großanzeige mit Sensorspannung und Bewertung (im/über/unter Zielbereich) |
-| pH-Verlauf | Live-Liniendiagramm mit Zielband, Tooltip, Tastaturbedienung (Pfeiltasten) und Tabellenansicht |
+| pH-Verlauf | Live-Liniendiagramm mit Zielband, Tooltip, Tastaturbedienung (Pfeiltasten) und Tabellenansicht; „CSV exportieren“ lädt die Messwerte herunter, „Diagramm speichern“ das Bild als PNG |
 | Peristaltikpumpe | Betriebsart, Dosierzähler (gesamt und 24 h), Sperrzeit, Testlauf mit Sekundenangabe, Not-Aus; rote Warnung, wenn die Mengenbegrenzung ausgelöst hat |
 | Weitere Messwerte | Wassertemperatur, Lufttemperatur, Luftfeuchte, Kontaktsensor |
 
@@ -276,7 +277,10 @@ pip install -r iot/requirements.txt
 ## 5  Messreihe auswerten – Kurven plotten
 
 Das Skript [tools/plot_messreihe.py](tools/plot_messreihe.py) erzeugt aus der
-CSV-Logdatei druckfertige Diagramme (PNG, 300 dpi).
+CSV-Logdatei druckfertige Diagramme (PNG, 300 dpi). Es liest sowohl das
+vollständige Log vom Pi (`hydroponik_log.csv`, per `scp` holen) als auch die
+über „CSV exportieren“ aus der Weboberfläche heruntergeladene Datei – beide
+verwenden dieselben Spaltennamen.
 
 ### Einrichtung (einmalig, auf dem Windows-Rechner)
 
@@ -319,6 +323,7 @@ Darstellungsregeln, die das Skript bereits umsetzt:
   alle anderen Achsen folgen dem Muster „Größe in Einheit“ (DIN 461).
 - Die Kennlinie muss eine Gerade mit **50–59 mV/pH** ergeben
   (Nernst-Bereich); das Skript warnt, wenn die Steilheit außerhalb liegt.
+  
 
 ### Format der Titrationsdatei
 
