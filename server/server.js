@@ -3,29 +3,50 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+const PORT = process.env.PORT || 3000;
 const PI_API_BASE_URL = process.env.PI_API_BASE_URL;
 const PI_SENSOR_POLL_INTERVAL_MS = Number(process.env.PI_SENSOR_POLL_INTERVAL_MS || 2000);
 
-let latestSensorData = {
+// Dosiermenge fuer den manuellen Testlauf ueber die Weboberflaeche.
+// Die harte Obergrenze setzt zusaetzlich der Pi (PUMPE_MAX_EIN_S in hydroponik.py).
+const PUMP_MAX_SECONDS = Number(process.env.PUMP_MAX_SECONDS || 10);
+
+// Fallback, solange die Pi-API Sollwert und Toleranz nicht selbst mitliefert.
+const PH_TARGET = Number(process.env.PH_TARGET || 5.8);
+const PH_TOLERANCE = Number(process.env.PH_TOLERANCE || 0.2);
+
+// Verlauf fuer das Diagramm, damit nach einem Reload nicht bei null begonnen wird.
+const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 120);
+const history = [];
+
+let latest = {
     type: 'sensorData',
-    temperature: null,
     ph: null,
-    waterLevel: null,
-    nitrogen: null,
-    phosphorus: null,
-    potassium: null,
-    lightsOn: false,
+    phVoltage: null,
+    waterTemp: null,
+    airTemp: null,
+    airHumidity: null,
+    moist: null,
+    pumpActive: false,
+    mode: null,
+    target: PH_TARGET,
+    tolerance: PH_TOLERANCE,
+    doseCount: null,
+    doseCount24h: null,
+    doseLimit: null,
+    doseLocked: false,
+    lockoutRemaining: null,
+    lastDose: null,
     timestamp: null
 };
 
-// Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 function toNumber(value) {
@@ -36,78 +57,62 @@ function toNumber(value) {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizeSensorData(payload = {}) {
-    const isPiShape = Object.prototype.hasOwnProperty.call(payload, 'luft_temp') ||
-        Object.prototype.hasOwnProperty.call(payload, 'wasser_temp') ||
-        Object.prototype.hasOwnProperty.call(payload, 'luft_feuchte');
-
-    if (isPiShape) {
-        return {
-            ...latestSensorData,
-            type: 'sensorData',
-            // UI zeigt aktuell "Water Temp", daher priorisieren wir wasser_temp.
-            temperature: toNumber(payload.wasser_temp ?? payload.luft_temp),
-            ph: toNumber(payload.ph),
-            // Feuchtigkeit aus dem Pi-API-Shape wird als Füllstand/Feuchte-Wert für die UI genutzt.
-            waterLevel: toNumber(payload.water_level ?? payload.waterLevel ?? payload.feuchtigkeit ?? latestSensorData.waterLevel),
-            nitrogen: toNumber(payload.nitrogen ?? latestSensorData.nitrogen),
-            phosphorus: toNumber(payload.phosphorus ?? latestSensorData.phosphorus),
-            potassium: toNumber(payload.potassium ?? latestSensorData.potassium),
-            lightsOn: Boolean(payload.lightsOn ?? payload.pumpe ?? latestSensorData.lightsOn),
-            timestamp: payload.timestamp ?? new Date().toISOString()
-        };
-    }
-
+/**
+ * Uebersetzt den "zustand"-Dictionary aus hydroponik.py in die Feldnamen
+ * der Weboberflaeche. Ungueltige Messungen bleiben null und werden als "--"
+ * angezeigt - es wird bewusst kein alter Wert weitergefuehrt.
+ */
+function normalize(payload = {}) {
     return {
-        ...latestSensorData,
-        ...payload,
         type: 'sensorData',
-        temperature: toNumber(payload.temperature ?? latestSensorData.temperature),
-        ph: toNumber(payload.ph ?? latestSensorData.ph),
-        waterLevel: toNumber(payload.waterLevel ?? latestSensorData.waterLevel),
-        nitrogen: toNumber(payload.nitrogen ?? latestSensorData.nitrogen),
-        phosphorus: toNumber(payload.phosphorus ?? latestSensorData.phosphorus),
-        potassium: toNumber(payload.potassium ?? latestSensorData.potassium),
-        lightsOn: Boolean(payload.lightsOn ?? latestSensorData.lightsOn),
+        ph: toNumber(payload.ph),
+        phVoltage: toNumber(payload.ph_spannung),
+        waterTemp: toNumber(payload.wasser_temp),
+        airTemp: toNumber(payload.luft_temp),
+        airHumidity: toNumber(payload.luft_feuchte),
+        // Kontaktsensor liefert nass/trocken, keinen Zahlenwert.
+        moist: payload.feuchtigkeit === null || payload.feuchtigkeit === undefined
+            ? null
+            : Boolean(payload.feuchtigkeit),
+        pumpActive: Boolean(payload.pumpe),
+        mode: payload.betriebsart ?? null,
+        target: toNumber(payload.sollwert_ph) ?? latest.target,
+        tolerance: toNumber(payload.toleranz_ph) ?? latest.tolerance,
+        doseCount: toNumber(payload.dosierungen_gesamt),
+        doseCount24h: toNumber(payload.dosierungen_24h),
+        doseLimit: toNumber(payload.max_dosierungen_tag),
+        doseLocked: Boolean(payload.dosierung_gesperrt),
+        lockoutRemaining: toNumber(payload.sperrzeit_rest_s),
+        lastDose: payload.letzte_dosierung ?? null,
         timestamp: payload.timestamp ?? new Date().toISOString()
     };
 }
 
-// WebSocket Server for real-time communication
-wss.on('connection', (ws) => {
-    console.log('New client connected');
-    ws.send(JSON.stringify(latestSensorData));
-    
-    ws.on('message', (message) => {
-        const rawMessage = message.toString();
-        console.log('Received:', rawMessage);
-
-        try {
-            const parsed = JSON.parse(rawMessage);
-
-            if (parsed.type === 'requestData') {
-                ws.send(JSON.stringify(latestSensorData));
-                return;
-            }
-
-            if (parsed.type === 'sensorData' || parsed.wasser_temp !== undefined || parsed.luft_temp !== undefined) {
-                latestSensorData = normalizeSensorData(parsed);
-                broadcastToClients(JSON.stringify(latestSensorData));
-                return;
-            }
-
-            broadcastToClients(rawMessage);
-        } catch (error) {
-            console.error('Invalid JSON message:', error.message);
-        }
+function remember(reading) {
+    if (reading.ph === null) {
+        return;
+    }
+    const previous = history[history.length - 1];
+    if (previous && previous.timestamp === reading.timestamp) {
+        return;
+    }
+    history.push({
+        timestamp: reading.timestamp,
+        ph: reading.ph,
+        phVoltage: reading.phVoltage
     });
+    if (history.length > HISTORY_LIMIT) {
+        history.shift();
+    }
+}
 
-    ws.on('close', () => {
-        console.log('Client disconnected');
-    });
-});
+function publish(payload) {
+    latest = normalize(payload);
+    remember(latest);
+    broadcast(JSON.stringify(latest));
+}
 
-function broadcastToClients(data) {
+function broadcast(data) {
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(data);
@@ -115,74 +120,110 @@ function broadcastToClients(data) {
     });
 }
 
-async function syncSensorDataFromPi() {
-    if (!PI_API_BASE_URL) {
-        return;
-    }
+// ------------------------------------------------------------------
+//   WebSocket: Push an alle Browser
+// ------------------------------------------------------------------
+wss.on('connection', (ws) => {
+    console.log('Client verbunden');
+    ws.send(JSON.stringify(latest));
 
+    ws.on('message', (message) => {
+        try {
+            const parsed = JSON.parse(message.toString());
+            if (parsed.type === 'requestData') {
+                ws.send(JSON.stringify(latest));
+                return;
+            }
+            // Messwerte vom Pi oder vom Simulator.
+            publish(parsed);
+        } catch (error) {
+            console.error('Ungueltige Nachricht:', error.message);
+        }
+    });
+
+    ws.on('close', () => console.log('Client getrennt'));
+});
+
+// ------------------------------------------------------------------
+//   Pi-Abfrage
+// ------------------------------------------------------------------
+async function pollPi() {
     try {
         const response = await fetch(`${PI_API_BASE_URL}/api/sensors`);
         if (!response.ok) {
-            console.warn(`Pi sensor API returned ${response.status}`);
+            console.warn(`Pi-API antwortete mit ${response.status}`);
             return;
         }
-
-        const data = await response.json();
-        latestSensorData = normalizeSensorData(data);
-        broadcastToClients(JSON.stringify(latestSensorData));
+        publish(await response.json());
     } catch (error) {
-        console.warn('Pi sensor API unreachable:', error.message);
+        console.warn('Pi-API nicht erreichbar:', error.message);
     }
 }
 
-// REST API Endpoints
-app.post('/api/sensor-data', (req, res) => {
-    latestSensorData = normalizeSensorData(req.body);
-    broadcastToClients(JSON.stringify(latestSensorData));
-    res.status(200).json({ status: 'ok' });
-});
-
-app.get('/api/sensors', (req, res) => {
-    res.json(latestSensorData);
-});
+// ------------------------------------------------------------------
+//   REST
+// ------------------------------------------------------------------
+app.get('/api/sensors', (req, res) => res.json(latest));
 
 app.post('/api/sensors', (req, res) => {
-    latestSensorData = normalizeSensorData(req.body);
-    broadcastToClients(JSON.stringify(latestSensorData));
-    res.status(200).json({ status: 'ok' });
+    publish(req.body);
+    res.json({ status: 'ok' });
 });
 
+app.get('/api/history', (req, res) => res.json(history));
+
+/**
+ * Peristaltikpumpe (pH-Minus).
+ *
+ *   POST /api/pump/dose  { "seconds": 2 }  ->  Pi: GET /api/pumpe/test?sekunden=2
+ *   POST /api/pump/stop                    ->  Pi: GET /api/pumpe/stopp
+ *
+ * Ein dauerhaftes Einschalten gibt es bewusst nicht: hydroponik.py kennt nur
+ * zeitbegrenzte Laeufe, damit die Pumpe bei einem Verbindungsabbruch stoppt.
+ * Hinweis: /api/pumpe/test antwortet erst NACH Ablauf der Dosierzeit.
+ */
 app.post('/api/pump/:action', async (req, res) => {
     const { action } = req.params;
-    if (action !== 'on' && action !== 'off') {
-        res.status(400).json({ error: 'Invalid action' });
+    if (action !== 'dose' && action !== 'stop') {
+        res.status(400).json({ fehler: 'Aktion muss "dose" oder "stop" sein' });
         return;
     }
 
-    if (PI_API_BASE_URL) {
-        try {
-            const response = await fetch(`${PI_API_BASE_URL}/api/pump/${action}`);
-            const data = await response.json();
-            res.status(response.status).json(data);
-            return;
-        } catch (error) {
-            res.status(502).json({ error: 'Pi API unreachable', details: error.message });
-            return;
-        }
+    const requested = toNumber(req.body?.seconds) ?? 2;
+    const seconds = Math.min(Math.max(requested, 0.1), PUMP_MAX_SECONDS);
+
+    if (!PI_API_BASE_URL) {
+        res.json({ status: 'ok', modus: 'demo', aktion: action, sekunden: seconds });
+        return;
     }
 
-    broadcastToClients(JSON.stringify({ type: 'pumpControl', action }));
-    res.json({ status: 'ok', mode: 'ws-only', action });
+    const url = action === 'dose'
+        ? `${PI_API_BASE_URL}/api/pumpe/test?sekunden=${seconds}`
+        : `${PI_API_BASE_URL}/api/pumpe/stopp`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+            await pollPi();
+        }
+        res.status(response.status).json(data);
+    } catch (error) {
+        res.status(502).json({ fehler: 'Pi-API nicht erreichbar', details: error.message });
+    }
 });
 
+// ------------------------------------------------------------------
+//   Start
+// ------------------------------------------------------------------
 if (PI_API_BASE_URL) {
-    syncSensorDataFromPi();
-    setInterval(syncSensorDataFromPi, PI_SENSOR_POLL_INTERVAL_MS);
+    pollPi();
+    setInterval(pollPi, PI_SENSOR_POLL_INTERVAL_MS);
 }
 
-// Start server
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`WebSocket server listening on ws://localhost:${PORT}`);
+    console.log(`Server laeuft auf http://localhost:${PORT}`);
+    console.log(PI_API_BASE_URL
+        ? `Pi-API: ${PI_API_BASE_URL} (alle ${PI_SENSOR_POLL_INTERVAL_MS} ms)`
+        : 'Kein PI_API_BASE_URL gesetzt - Demobetrieb, Daten per WebSocket erwartet');
 });

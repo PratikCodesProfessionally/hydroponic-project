@@ -1,0 +1,45 @@
+# systemd-Service fuer das Messprogramm auf dem Raspberry Pi.
+#
+# Startet hydroponik.py automatisch beim Hochfahren, damit nach einem
+# Stromausfall oder Neustart weitergemessen wird, ohne dass sich jemand
+# per SSH anmelden muss.
+#
+# Installation:
+#   sudo cp iot/hydroponik.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hydroponik
+#
+# Bedienung:
+#   systemctl status hydroponik        Zustand ansehen
+#   journalctl -u hydroponik -f        Ausgaben live mitlesen
+#   sudo systemctl restart hydroponik  neu starten
+#   sudo systemctl stop hydroponik     anhalten
+#
+# Pfade pruefen: User, WorkingDirectory und ExecStart muessen zu deiner
+# Installation passen. Ohne venv ist der Interpreter /usr/bin/python3.
+
+[Unit]
+Description=Hydroponik pH-Messung und Regelung
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/hydroponic-project
+
+# BEWUSST --nur-messen: die Dosierpumpe bleibt gesperrt.
+# Auf --regeln erst umstellen, wenn Kalibrierung, Pumpenkennlinie und
+# Titrationsversuch vorliegen - sonst dosiert die Anlage nach jedem
+# Stromausfall selbsttaetig los, ohne dass jemand danach sieht.
+ExecStart=/home/pi/hydro-venv/bin/python3 iot/hydroponik.py --nur-messen
+
+Restart=on-failure
+RestartSec=10
+
+# Ausgaben landen im Journal, nicht in einer eigenen Datei.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

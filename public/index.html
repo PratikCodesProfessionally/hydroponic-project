@@ -1,94 +1,124 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hydroponic Master Control</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap">
+    <title>pH-Regelung Hydroponik</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <header>
-        <h1>🌱 Hydroponic Control Center</h1>
-        <div id="connection-status" class="connection-badge offline">Disconnected</div>
+    <header class="topbar">
+        <h1>pH-Regelung Hydroponik</h1>
+        <div class="topbar-status">
+            <span id="last-update" class="muted">Letzte Messung: --</span>
+            <span id="connection" class="pill pill-offline">
+                <span class="pill-icon" aria-hidden="true">●</span>Getrennt
+            </span>
+        </div>
     </header>
 
-    <main class="dashboard">
-        <!-- System Overview Card -->
-        <div class="card overview-card">
-            <h2><span class="icon">📊</span> System Overview</h2>
-            <div class="status-grid">
-                <div class="metric">
-                    <div class="metric-value" id="temperature">--°C</div>
-                    <div class="metric-label">Water Temp</div>
+    <main>
+        <!-- Aktueller Messwert -->
+        <section class="card hero-card">
+            <div class="hero">
+                <div>
+                    <p class="label">Aktueller pH-Wert</p>
+                    <p class="hero-value" id="ph-value">--</p>
+                    <p class="hero-sub muted" id="ph-voltage">Sensorspannung --</p>
                 </div>
-                <div class="metric">
-                    <div class="metric-value" id="ph-level">--</div>
-                    <div class="metric-label">pH Level</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value" id="water-level">--%</div>
-                    <div class="metric-label">Tank Level</div>
+                <div class="hero-side">
+                    <span id="ph-state" class="pill pill-neutral">
+                        <span class="pill-icon" aria-hidden="true">●</span>Keine Daten
+                    </span>
+                    <p class="muted" id="target-text">Zielbereich --</p>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- NPK Nutrients Card -->
-        <div class="card npk-card">
-            <h2><span class="icon">🧪</span> Nutrient Control</h2>
-            <div class="nutrient-controls">
-                <!-- Nitrogen Control -->
-                <div class="nutrient-panel">
-                    <h3>Nitrogen (N)</h3>
-                    <div class="nutrient-value" id="n-value">-- ppm</div>
-                    <input type="range" min="0" max="200" value="100" class="nutrient-slider" id="n-slider">
-                    <button class="dose-btn" id="n-dose">Dose 5ml</button>
+        <!-- Verlauf -->
+        <section class="card chart-card">
+            <div class="card-head">
+                <div>
+                    <h2>pH-Verlauf</h2>
+                    <p class="muted">Messwerte vom Raspberry Pi, live</p>
                 </div>
-                
-                <!-- Phosphorus Control -->
-                <div class="nutrient-panel">
-                    <h3>Phosphorus (P)</h3>
-                    <div class="nutrient-value" id="p-value">-- ppm</div>
-                    <input type="range" min="0" max="150" value="50" class="nutrient-slider" id="p-slider">
-                    <button class="dose-btn" id="p-dose">Dose 3ml</button>
-                </div>
-                
-                <!-- Potassium Control -->
-                <div class="nutrient-panel">
-                    <h3>Potassium (K)</h3>
-                    <div class="nutrient-value" id="k-value">-- ppm</div>
-                    <input type="range" min="0" max="250" value="150" class="nutrient-slider" id="k-slider">
-                    <button class="dose-btn" id="k-dose">Dose 7ml</button>
-                </div>
+                <button type="button" class="btn-ghost" id="table-toggle" aria-expanded="false">
+                    Tabelle anzeigen
+                </button>
             </div>
-        </div>
 
-        <!-- Environmental Controls -->
-        <div class="card env-card">
-            <h2><span class="icon">🌡️</span> Environment</h2>
-            <div class="control-group">
-                <div class="control-item">
-                    <label>Water Temp Target</label>
-                    <div class="setpoint-display" id="temp-setpoint">22°C</div>
-                    <input type="range" min="18" max="30" value="22" class="control-slider" id="temp-slider">
+            <div class="chart-wrap">
+                <svg id="chart" role="img" aria-labelledby="chart-title"></svg>
+                <span id="chart-title" class="visually-hidden">Liniendiagramm des pH-Verlaufs</span>
+                <div id="chart-empty" class="chart-empty muted">Warte auf Messwerte …</div>
+                <div id="tooltip" class="tooltip" hidden></div>
+            </div>
+
+            <div id="table-view" class="table-wrap" hidden>
+                <table>
+                    <caption class="visually-hidden">pH-Messwerte mit Zeitstempel</caption>
+                    <thead>
+                        <tr><th scope="col">Zeit</th><th scope="col">pH</th><th scope="col">Spannung</th></tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Dosierpumpe -->
+        <section class="card">
+            <div class="card-head">
+                <h2>Peristaltikpumpe (pH-Minus)</h2>
+                <span id="dose-lock" class="pill pill-critical" hidden>
+                    <span class="pill-icon" aria-hidden="true">✕</span>Tagesgrenze erreicht
+                </span>
+            </div>
+            <p id="dose-lock-note" class="note" hidden>
+                Die Mengenbegrenzung hat ausgelöst — der pH-Wert wird
+                <strong>nicht mehr automatisch korrigiert</strong>. Anlage prüfen
+                (Leck, Kalibrierung, Pufferkapazität), dann das Pi-Programm neu starten.
+            </p>
+            <dl class="kv">
+                <div><dt>Betriebsart</dt><dd id="mode">--</dd></div>
+                <div><dt>Pumpe</dt><dd id="pump-state">aus</dd></div>
+                <div><dt>Dosierungen (24 h)</dt><dd id="dose-24h">--</dd></div>
+                <div><dt>Dosierungen gesamt</dt><dd id="dose-count">--</dd></div>
+                <div><dt>Sperrzeit verbleibend</dt><dd id="lockout">--</dd></div>
+                <div><dt>Letzte Dosierung</dt><dd id="last-dose">--</dd></div>
+            </dl>
+
+            <div class="pump-controls">
+                <label for="pump-seconds">Testlauf</label>
+                <input type="number" id="pump-seconds" min="0.1" max="10" step="0.1" value="2">
+                <span class="muted">s</span>
+                <button type="button" class="btn" id="pump-dose">Dosieren</button>
+                <button type="button" class="btn btn-stop" id="pump-stop">Not-Aus</button>
+            </div>
+            <p id="pump-feedback" class="feedback muted" role="status"></p>
+        </section>
+
+        <!-- Begleitmesswerte -->
+        <section class="card">
+            <h2>Weitere Messwerte</h2>
+            <div class="tiles">
+                <div class="tile">
+                    <p class="label">Wassertemperatur</p>
+                    <p class="tile-value" id="water-temp">--</p>
                 </div>
-                
-                <div class="control-item">
-                    <label>pH Target</label>
-                    <div class="setpoint-display" id="ph-setpoint">6.0</div>
-                    <input type="range" min="5.0" max="7.0" step="0.1" value="6.0" class="control-slider" id="ph-slider">
+                <div class="tile">
+                    <p class="label">Lufttemperatur</p>
+                    <p class="tile-value" id="air-temp">--</p>
                 </div>
-                
-                <div class="control-item">
-                    <label>Grow Lights</label>
-                    <label class="switch">
-                        <input type="checkbox" id="light-toggle">
-                        <span class="slider round"></span>
-                    </label>
-                    <div id="light-status" class="status-text">OFF</div>
+                <div class="tile">
+                    <p class="label">Luftfeuchte</p>
+                    <p class="tile-value" id="air-humidity">--</p>
+                </div>
+                <div class="tile">
+                    <p class="label">Kontaktsensor</p>
+                    <p class="tile-value" id="moisture">--</p>
                 </div>
             </div>
-        </div>
+        </section>
     </main>
 
     <script src="app.js"></script>

@@ -1,0 +1,7 @@
+# Auswertung der Messreihe (nur auf dem Auswerte-Rechner noetig,
+# nicht auf dem Raspberry Pi).
+#
+#   pip install -r tools/requirements.txt
+
+matplotlib
+numpy

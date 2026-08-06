@@ -1,0 +1,20 @@
+# Python-Abhaengigkeiten fuer hydroponik.py (nur auf dem Raspberry Pi).
+#
+#   python3 -m venv --system-site-packages ~/hydro-venv
+#   source ~/hydro-venv/bin/activate
+#   pip install -r iot/requirements.txt
+
+# Hardwarezugriff
+adafruit-blinka                      # stellt board und busio bereit
+adafruit-circuitpython-ads1x15       # ADS1115 (pH-Sensor)
+adafruit-circuitpython-dht           # DHT11 (Luft)
+gpiozero                             # Kontaktsensor und Pumpe
+
+# Pin-Backend fuer gpiozero:
+#   Pi 5      -> lgpio
+#   Pi 4/3/Zero -> RPi.GPIO
+lgpio
+
+# API
+flask
+flask-cors
