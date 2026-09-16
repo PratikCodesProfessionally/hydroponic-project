@@ -42,7 +42,7 @@ Der Node-Server hat vier Aufgaben:
 | **Abfragen** | Holt alle 2 s `GET /api/sensors` von der Pi-API (`PI_API_BASE_URL`) |
 | **Übersetzen** | Bildet die Feldnamen des Pi (`wasser_temp`, `ph_spannung`, …) auf das Datenmodell der Oberfläche ab; ungültige Messungen bleiben `null` und werden als `--` angezeigt – es wird bewusst kein alter Wert weitergeführt |
 | **Verteilen** | Schickt jeden neuen Messwert per WebSocket an alle verbundenen Browser |
-| **Puffern** | Hält die letzten 120 pH-Werte, damit das Diagramm nach einem Seiten-Reload nicht leer beginnt |
+| **Puffern** | Hält die Messwerte der letzten rund 24 Stunden (`HISTORY_LIMIT`, Standard 43200 Einträge bei 2-s-Takt) für CSV-Export und Diagramm; das Diagramm zeigt nach einem Seiten-Reload die letzten 120 Punkte |
 
 ### Schnittstellen des Node-Servers
 
