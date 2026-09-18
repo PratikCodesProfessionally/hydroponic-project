@@ -5,7 +5,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "simulate": "node iot/simulator.js"
+    "simulate": "node iot/simulator.js",
+    "test": "node --test test/csv-export.test.js"
   },
   "keywords": [],
   "author": "",

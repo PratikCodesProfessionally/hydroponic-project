@@ -33,6 +33,22 @@ GET /api/sensors     ───►   server/server.js         ───►   publ
                             Verlaufspuffer
 ```
 
+### iot/ – das Programm auf dem Pi
+
+| Datei | Aufgabe |
+| --- | --- |
+| `hydroponik.py` | Messprogramm mit pH-Regelung und Web-API (Port 5000). Läuft seit dem 17.09.2026 auf dem Pi; überarbeitete Fassung des Vorprojekt-Codes. Meldet alle Messwerte, Sensorspannung in Volt, Betriebsart, Dosierzähler und Sperrzeit |
+| `kalibrieren.py` | Zweipunktkalibrierung (pH 4,01 / 7,00) mit Verifikation bei pH 10,01. Schreibt `iot/kalibrierung.json`, die `hydroponik.py` beim Start einliest. **Ohne diese Datei startet das Messprogramm nicht.** |
+| `hydroponik.service` | systemd-Dienst für den automatischen Start, bewusst mit `--nur-messen` |
+| `simulator.js` | Ersatz für den Pi im Demobetrieb |
+| `archiv/` | Frühere Programmstände, u. a. `ganzerCode.py`, mit dem alle Messreihen bis zum 11.08.2026 aufgenommen wurden (siehe [iot/archiv/README.md](iot/archiv/README.md)) |
+
+Auf dem Pi entstehen zwei Protokolle neben dem Skript: `hydroponik_log.csv`
+(jede Einzelmessung, alle 10 s) und `dosierungen_log.csv` (Zeitpunkt, Dauer
+und Menge jeder Dosierung). Die Pumpe ist im Sensor-Log praktisch nie als
+aktiv zu sehen, weil der Zustand während eines Laufs nicht aktualisiert wird;
+Dosierungen sind über das Dosierprotokoll belegt.
+
 ### server/server.js
 
 Der Node-Server hat vier Aufgaben:
@@ -218,17 +234,47 @@ Messprogramm startet automatisch (Abschnitt 4).
 
 ## 4  Befehle auf dem Raspberry Pi
 
-Falls das Messskript bei dir anders heißt (z. B. `ganzerCode.py`), den Namen
-in den Befehlen entsprechend ersetzen.
+### Vor jeder Messreihe: Uhrzeit prüfen
+
+```bash
+date
+```
+
+Der Pi hat keine gepufferte Echtzeituhr. Ohne erreichbaren Zeitserver setzt
+er nach einem Neustart die zuletzt gespeicherte Uhrzeit fort – die
+Zeitstempel im Log tragen dann ein falsches Datum, nur die Zeitdifferenzen
+innerhalb einer Reihe stimmen. Das ist bei den Messreihen vom 07.08. und
+11.08.2026 passiert (beide tragen Zeitstempel vom 06.08.). Stimmt die Zeit
+nicht, WLAN prüfen oder notfalls von Hand setzen:
+
+```bash
+sudo date -s "2026-09-18 14:30:00"
+```
+
+### Kalibrieren (einmalig, und nach jedem Elektrodenwechsel oder Wässern)
+
+```bash
+cd ~/hydroponic-project
+python3 iot/kalibrieren.py
+```
+
+Das Skript führt durch die Puffer pH 4,01, 7,00 und 10,01. Elektrode **und**
+Temperatursensor in den jeweiligen Becher halten, warten, bis der angezeigte
+Wert stabil ist, dann mit Enter bestätigen. Ergebnis: `iot/kalibrierung.json`
+mit Steilheit, Nullpunkt und Kalibriertemperatur. Liegt die Steilheit unter
+85 % des theoretischen Werts, warnt das Skript (Anforderung M-06).
 
 ### Messprogramm starten
 
 ```bash
 cd ~/hydroponic-project
-python3 iot/hydroponik.py --nur-messen     # Messbetrieb, Pumpe gesperrt
-python3 iot/hydroponik.py --regeln         # mit aktiver pH-Regelung
-python3 iot/hydroponik.py --kalibrieren    # nur Sensorspannung anzeigen
+python3 iot/hydroponik.py --nur-messen     # messen und loggen, keine automatische Dosierung
+python3 iot/hydroponik.py                  # mit aktiver pH-Regelung
 ```
+
+Im Messbetrieb bleibt der manuelle Testlauf über das Dashboard möglich. Die
+API bindet nur auf 192.168.10.1; zum Testen ohne Kabel
+`HYDRO_API_HOST=0.0.0.0` voranstellen.
 
 Läuft das Programm über SSH, beendet das Schließen des Fensters es mit.
 Für längere Messreihen deshalb `tmux`:
@@ -260,9 +306,15 @@ an die eigene Installation anpassen.
 # Windows → Pi (Skript aktualisieren)
 scp C:\Users\prati\hydroponic-system\iot\hydroponik.py pi@192.168.10.1:~/hydroponic-project/iot/
 
-# Pi → Windows (Messdaten holen)
-scp pi@192.168.10.1:~/hydroponic-project/hydroponik_log.csv C:\Users\prati\hydroponic-system\
+# Pi → Windows (Messdaten holen; die Logs liegen neben dem Skript in iot/)
+scp pi@192.168.10.1:~/hydroponic-project/iot/hydroponik_log.csv C:\Users\prati\hydroponic-system\
+scp pi@192.168.10.1:~/hydroponic-project/iot/dosierungen_log.csv C:\Users\prati\hydroponic-system\
 ```
+
+Die CSV-Dateien **nicht mit Excel öffnen und wieder speichern**: Excel
+entfernt die Sekunden aus den Zeitstempeln und zerstört Dezimalzahlen
+(aus 5,45 wird „5.450.000.000.000.000“). Für die Auswertung immer die
+unveränderte Originaldatei verwenden.
 
 ### Python-Abhängigkeiten installieren (einmalig)
 
@@ -356,4 +408,9 @@ Einschwingverhalten zu grob.
 | Verbindung nach Pi-Neustart weg | Adresse war nur mit `ip addr add` gesetzt | dauerhaft per `nmcli` konfigurieren (Abschnitt 3) |
 | `npm start` meldet „Kein PI_API_BASE_URL gesetzt“ | Variable gilt nur im jeweiligen Fenster | `.\start-pi.ps1` verwenden |
 | Port 3000 belegt | alter Node-Prozess läuft noch | `taskkill /F /IM node.exe`, dann neu starten |
+| Pi: „Keine Kalibrierung gefunden“ | `iot/kalibrierung.json` fehlt | `python3 iot/kalibrieren.py` ausführen (Abschnitt 4) |
+| Pi: „API konnte nicht an 192.168.10.1:5000 binden“ | Adresse beim Start noch nicht auf eth0 | Programm versucht es alle 5 s erneut; feste Adresse per `nmcli` prüfen (Abschnitt 3) |
+| Dashboard zeigt Sensorspannung `--`, pH aber normal | Pi liefert die Spannung nicht oder in mV | Programmstand auf dem Pi prüfen: `iot/hydroponik.py` meldet Volt |
+| Zeitstempel im Log mit altem Datum | Pi ohne Zeitserver gestartet | `date` prüfen, Zeit setzen (Abschnitt 4); Zeitdifferenzen bleiben gültig |
+| Testlauf/Not-Aus im Dashboard ohne Wirkung | auf dem Pi läuft `ganzerCode.py` (alte Endpunkte) | aktuelles `iot/hydroponik.py` auf den Pi kopieren |
 | Skriptausführung von `start-pi.ps1` blockiert | PowerShell-Richtlinie | `Set-ExecutionPolicy -Scope Process -Bypass` |

@@ -2,3 +2,6 @@ node_modules/
 __pycache__/
 *.pyc
 hydroponik_log.csv
+hydroponik_log.csv.*.alt
+dosierungen_log.csv
+dosierungen_log.csv.*.alt

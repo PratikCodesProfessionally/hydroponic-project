@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const cors = require('cors');
+const { formatCsvValue, sanitizeNumericValue } = require('./csv-utils');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,12 +51,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-function toNumber(value) {
-    if (value === null || value === undefined || value === '') {
-        return null;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+function toNumber(value, options = {}) {
+    return sanitizeNumericValue(value, options);
 }
 
 /**
@@ -66,24 +63,24 @@ function toNumber(value) {
 function normalize(payload = {}) {
     return {
         type: 'sensorData',
-        ph: toNumber(payload.ph),
-        phVoltage: toNumber(payload.ph_spannung),
-        waterTemp: toNumber(payload.wasser_temp),
-        airTemp: toNumber(payload.luft_temp),
-        airHumidity: toNumber(payload.luft_feuchte),
+        ph: toNumber(payload.ph, { min: 0, max: 14, absMax: 1e12 }),
+        phVoltage: toNumber(payload.ph_spannung, { min: 0, max: 5, absMax: 1e12 }),
+        waterTemp: toNumber(payload.wasser_temp, { min: -50, max: 100, absMax: 1e12 }),
+        airTemp: toNumber(payload.luft_temp, { min: -50, max: 100, absMax: 1e12 }),
+        airHumidity: toNumber(payload.luft_feuchte, { min: 0, max: 100, absMax: 1e12 }),
         // Kontaktsensor liefert nass/trocken, keinen Zahlenwert.
         moist: payload.feuchtigkeit === null || payload.feuchtigkeit === undefined
             ? null
             : Boolean(payload.feuchtigkeit),
         pumpActive: Boolean(payload.pumpe),
         mode: payload.betriebsart ?? null,
-        target: toNumber(payload.sollwert_ph) ?? latest.target,
-        tolerance: toNumber(payload.toleranz_ph) ?? latest.tolerance,
-        doseCount: toNumber(payload.dosierungen_gesamt),
-        doseCount24h: toNumber(payload.dosierungen_24h),
-        doseLimit: toNumber(payload.max_dosierungen_tag),
+        target: toNumber(payload.sollwert_ph, { min: 0, max: 14, absMax: 1e12 }) ?? latest.target,
+        tolerance: toNumber(payload.toleranz_ph, { min: 0, max: 2, absMax: 1e12 }) ?? latest.tolerance,
+        doseCount: toNumber(payload.dosierungen_gesamt, { min: 0, max: 100000, absMax: 1e12 }),
+        doseCount24h: toNumber(payload.dosierungen_24h, { min: 0, max: 100000, absMax: 1e12 }),
+        doseLimit: toNumber(payload.max_dosierungen_tag, { min: 0, max: 100000, absMax: 1e12 }),
         doseLocked: Boolean(payload.dosierung_gesperrt),
-        lockoutRemaining: toNumber(payload.sperrzeit_rest_s),
+        lockoutRemaining: toNumber(payload.sperrzeit_rest_s, { min: 0, max: 86400, absMax: 1e12 }),
         lastDose: payload.letzte_dosierung ?? null,
         timestamp: payload.timestamp ?? new Date().toISOString()
     };
@@ -193,7 +190,7 @@ app.get('/api/export.csv', (req, res) => {
     const zeilen = history.map(punkt =>
         [punkt.timestamp, punkt.ph, punkt.phVoltage, punkt.waterTemp,
          punkt.airTemp, punkt.airHumidity, punkt.pumpActive]
-            .map(wert => (wert === null || wert === undefined) ? '' : String(wert))
+            .map(formatCsvValue)
             .join(','));
 
     const stempel = (history[history.length - 1]?.timestamp || '')

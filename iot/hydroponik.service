@@ -28,10 +28,13 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/hydroponic-project
 
-# BEWUSST --nur-messen: die Dosierpumpe bleibt gesperrt.
-# Auf --regeln erst umstellen, wenn Kalibrierung, Pumpenkennlinie und
-# Titrationsversuch vorliegen - sonst dosiert die Anlage nach jedem
-# Stromausfall selbsttaetig los, ohne dass jemand danach sieht.
+# BEWUSST --nur-messen: keine automatische Dosierung, manueller Testlauf
+# ueber das Dashboard bleibt moeglich. Das Flag erst entfernen, wenn
+# Kalibrierung (iot/kalibrieren.py), Pumpenkennlinie und Sprungantwort
+# vorliegen - sonst dosiert die Anlage nach jedem Stromausfall
+# selbsttaetig los, ohne dass jemand danach sieht.
+# Voraussetzung: iot/kalibrierung.json existiert, sonst bricht das
+# Programm beim Start ab (Restart=on-failure versucht es alle 10 s erneut).
 ExecStart=/home/pi/hydro-venv/bin/python3 iot/hydroponik.py --nur-messen
 
 Restart=on-failure
