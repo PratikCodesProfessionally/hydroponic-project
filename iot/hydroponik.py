@@ -53,6 +53,16 @@ server.js, public/app.js und tools/plot_messreihe.py):
   - Schlägt das Binden der API an API_HOST fehl (Adresse beim Start noch
     nicht auf eth0), wird alle 5 s erneut versucht statt still aufzugeben.
 
+Änderung vom 23.09.2026:
+
+  - DHT11 (Lufttemperatur, Luftfeuchte) und der Kontaktsensor an GPIO 27 sind
+    entfernt. Beide stammten aus dem Vorprojekt, erfüllten keine Anforderung
+    aus Tabelle 3.1 und gingen in keine Entscheidung des Programms ein; der
+    DHT11 lieferte zudem in rund drei Vierteln der Zyklen keine Daten.
+    Gemessen wird nur noch, was die Regelung braucht: pH-Wert und
+    Nährlösungstemperatur für die Kompensation. Weboberfläche, CSV-Export und
+    Simulator sind entsprechend angepasst.
+
 Bewusst NICHT umgesetzt, weil sie Messungen statt Codeänderungen brauchen:
   b) Ursache des Messrauschens (Abschnitt 5.1)
   g/j/m) Sperrzeit und Dosiermenge aus Sprungantwort (Abschnitt 4.5) —
@@ -90,8 +100,7 @@ import board
 import busio
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
-import adafruit_dht
-from gpiozero import DigitalInputDevice, DigitalOutputDevice
+from gpiozero import DigitalOutputDevice
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -104,8 +113,6 @@ BETRIEBSART = "messbetrieb" if NUR_MESSEN else "regelung"
 # ============================
 #   PIN-ZUWEISUNGEN / DATEIEN
 # ============================
-DHT_PIN        = board.D17
-FEUCHTE_PIN    = 27
 PUMP_PIN       = 5
 W1_DEVICE_PATH = "/sys/bus/w1/devices/"
 
@@ -127,8 +134,6 @@ API_PORT = 5000
 # ============================
 #   SENSOR & AKTOR SETUP
 # ============================
-dht            = adafruit_dht.DHT11(DHT_PIN, use_pulseio=False)
-feuchte_sensor = DigitalInputDevice(FEUCHTE_PIN, pull_up=False)
 pumpe          = DigitalOutputDevice(PUMP_PIN)
 pumpe_lock     = threading.Lock()  # schützt gegen gleichzeitigen Zugriff
                                     # von Hauptschleife und Flask-Thread
@@ -205,12 +210,9 @@ KEIN_EFFEKT_ALARM_NACH = 3  # Anzahl wirkungsloser Dosierungen in Folge
 #   GLOBALER ZUSTAND
 # ============================
 sensor_data = {
-    "luft_temp":    None,
-    "luft_feuchte": None,
     "wasser_temp":  None,
     "ph":           None,
     "ph_spannung":  None,     # in VOLT (Dashboard, CSV-Export und Auswertung rechnen in V)
-    "feuchtigkeit": None,
     "pumpe":        False,
     "betriebsart":  BETRIEBSART,
     "sollwert_ph":  PH_SOLL,
@@ -263,7 +265,7 @@ def status_snapshot() -> dict:
     }
 
 
-def update_sensor_data(luft_temp, luft_feuchte, w_temp, ph, ph_spannung_mv, feucht):
+def update_sensor_data(w_temp, ph, ph_spannung_mv):
     """Globalen Zustand an einer einzigen Stelle aktualisieren (Punkt q):
     pumpe.is_active wird HIER gelesen, also im selben Moment wie der Rest —
     nicht erst nach einem späteren pumpe.off().
@@ -271,12 +273,9 @@ def update_sensor_data(luft_temp, luft_feuchte, w_temp, ph, ph_spannung_mv, feuc
     ph_spannung_mv kommt in mV aus read_ph() (die Kalibrierung rechnet in mV),
     nach außen geht der Wert in Volt."""
     sensor_data.update({
-        "luft_temp":    luft_temp,
-        "luft_feuchte": luft_feuchte,
         "wasser_temp":  w_temp,
         "ph":           ph,
         "ph_spannung":  round(ph_spannung_mv / 1000.0, 4) if ph_spannung_mv is not None else None,
-        "feuchtigkeit": feucht,
         "pumpe":        pumpe.is_active,
         "timestamp":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
@@ -562,10 +561,6 @@ def darf_automatisch_dosieren() -> bool:
 def cleanup(sig, frame):
     print("\nSystem wird beendet – Aktoren werden ausgeschaltet...")
     pumpe.off()          # ohne Lock, aus demselben Grund wie beim Not-Aus
-    try:
-        dht.exit()
-    except Exception:
-        pass
     sys.exit(0)
 
 
@@ -588,30 +583,6 @@ print("=" * 62)
 while True:
     print("\n==============================")
 
-    # --- Lufttemperatur & Luftfeuchte (DHT11) ---
-    luft_temp    = None
-    luft_feuchte = None
-    try:
-        luft_temp    = dht.temperature
-        luft_feuchte = dht.humidity
-        if luft_temp is not None and luft_feuchte is not None:
-            print(f"Lufttemperatur:  {luft_temp:.1f} °C")
-            print(f"Luftfeuchte:     {luft_feuchte:.1f} %")
-        else:
-            print("DHT11: keine Daten")
-    except Exception as e:
-        print(f"DHT11 Fehler: {e}")
-        try:
-            dht.exit()
-            time.sleep(1)
-            dht = adafruit_dht.DHT11(DHT_PIN, use_pulseio=False)
-        except Exception:
-            pass
-
-    # --- Bodenfeuchtesensor ---
-    feucht = feuchte_sensor.value
-    print("Feuchtigkeit: erkannt" if feucht else "Feuchtigkeit: trocken")
-
     # --- Wassertemperatur (DS18B20) ---
     w_temp = read_water_temp()
     if w_temp is not None:
@@ -631,7 +602,7 @@ while True:
         else:
             print("pH-Wert: ungültig/verworfen")
 
-        update_sensor_data(luft_temp, luft_feuchte, w_temp, ph_wert, ph_spannung, feucht)
+        update_sensor_data(w_temp, ph_wert, ph_spannung)
         log_data(sensor_data)  # Punkt p): Log-Intervall jetzt PH_MESSPAUSE (10 s)
         time.sleep(PH_MESSPAUSE)
 

@@ -31,9 +31,6 @@ let latest = {
     ph: null,
     phVoltage: null,
     waterTemp: null,
-    airTemp: null,
-    airHumidity: null,
-    moist: null,
     pumpActive: false,
     mode: null,
     target: PH_TARGET,
@@ -56,7 +53,7 @@ function toNumber(value, options = {}) {
 }
 
 /**
- * Uebersetzt den "zustand"-Dictionary aus hydroponik.py in die Feldnamen
+ * Uebersetzt den "sensor_data"-Dictionary aus hydroponik.py in die Feldnamen
  * der Weboberflaeche. Ungueltige Messungen bleiben null und werden als "--"
  * angezeigt - es wird bewusst kein alter Wert weitergefuehrt.
  */
@@ -66,12 +63,6 @@ function normalize(payload = {}) {
         ph: toNumber(payload.ph, { min: 0, max: 14, absMax: 1e12 }),
         phVoltage: toNumber(payload.ph_spannung, { min: 0, max: 5, absMax: 1e12 }),
         waterTemp: toNumber(payload.wasser_temp, { min: -50, max: 100, absMax: 1e12 }),
-        airTemp: toNumber(payload.luft_temp, { min: -50, max: 100, absMax: 1e12 }),
-        airHumidity: toNumber(payload.luft_feuchte, { min: 0, max: 100, absMax: 1e12 }),
-        // Kontaktsensor liefert nass/trocken, keinen Zahlenwert.
-        moist: payload.feuchtigkeit === null || payload.feuchtigkeit === undefined
-            ? null
-            : Boolean(payload.feuchtigkeit),
         pumpActive: Boolean(payload.pumpe),
         mode: payload.betriebsart ?? null,
         target: toNumber(payload.sollwert_ph, { min: 0, max: 14, absMax: 1e12 }) ?? latest.target,
@@ -99,8 +90,6 @@ function remember(reading) {
         ph: reading.ph,
         phVoltage: reading.phVoltage,
         waterTemp: reading.waterTemp,
-        airTemp: reading.airTemp,
-        airHumidity: reading.airHumidity,
         pumpActive: reading.pumpActive
     });
     if (history.length > HISTORY_LIMIT) {
@@ -186,10 +175,9 @@ app.get('/api/history', (req, res) => {
  * damit tools/plot_messreihe.py die Datei direkt einlesen kann.
  */
 app.get('/api/export.csv', (req, res) => {
-    const kopf = 'timestamp,ph,ph_spannung,wasser_temp,luft_temp,luft_feuchte,pumpe';
+    const kopf = 'timestamp,ph,ph_spannung,wasser_temp,pumpe';
     const zeilen = history.map(punkt =>
-        [punkt.timestamp, punkt.ph, punkt.phVoltage, punkt.waterTemp,
-         punkt.airTemp, punkt.airHumidity, punkt.pumpActive]
+        [punkt.timestamp, punkt.ph, punkt.phVoltage, punkt.waterTemp, punkt.pumpActive]
             .map(formatCsvValue)
             .join(','));
 

@@ -30,10 +30,16 @@ test('sanitizeNumericValue applies plausibility limits but keeps zero', () => {
 test('export row matches the Pi log column format', () => {
     const punkt = {
         timestamp: '2026-09-18 10:00:00', ph: 5.83, phVoltage: 1.5234,
-        waterTemp: 24.19, airTemp: null, airHumidity: null, pumpActive: false
+        waterTemp: 24.19, pumpActive: false
     };
-    const zeile = [punkt.timestamp, punkt.ph, punkt.phVoltage, punkt.waterTemp,
-        punkt.airTemp, punkt.airHumidity, punkt.pumpActive]
+    const zeile = [punkt.timestamp, punkt.ph, punkt.phVoltage,
+        punkt.waterTemp, punkt.pumpActive]
         .map(formatCsvValue).join(',');
-    assert.equal(zeile, '2026-09-18 10:00:00,5.83,1.5234,24.19,,,false');
+    assert.equal(zeile, '2026-09-18 10:00:00,5.83,1.5234,24.19,false');
+});
+
+test('missing water temperature leaves the column empty', () => {
+    const zeile = ['2026-09-18 10:00:00', 5.83, 1.5234, null, false]
+        .map(formatCsvValue).join(',');
+    assert.equal(zeile, '2026-09-18 10:00:00,5.83,1.5234,,false');
 });

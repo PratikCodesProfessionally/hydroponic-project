@@ -37,11 +37,18 @@ GET /api/sensors     ───►   server/server.js         ───►   publ
 
 | Datei | Aufgabe |
 | --- | --- |
-| `hydroponik.py` | Messprogramm mit pH-Regelung und Web-API (Port 5000). Läuft seit dem 17.09.2026 auf dem Pi; überarbeitete Fassung des Vorprojekt-Codes. Meldet alle Messwerte, Sensorspannung in Volt, Betriebsart, Dosierzähler und Sperrzeit |
+| `hydroponik.py` | Messprogramm mit pH-Regelung und Web-API (Port 5000). Läuft seit dem 17.09.2026 auf dem Pi; überarbeitete Fassung des Vorprojekt-Codes. Meldet pH-Wert, Sensorspannung in Volt, Nährlösungstemperatur, Betriebsart, Dosierzähler und Sperrzeit |
 | `kalibrieren.py` | Zweipunktkalibrierung (pH 4,01 / 7,00) mit Verifikation bei pH 10,01. Schreibt `iot/kalibrierung.json`, die `hydroponik.py` beim Start einliest. **Ohne diese Datei startet das Messprogramm nicht.** |
 | `hydroponik.service` | systemd-Dienst für den automatischen Start, bewusst mit `--nur-messen` |
 | `simulator.js` | Ersatz für den Pi im Demobetrieb |
 | `archiv/` | Frühere Programmstände, u. a. `ganzerCode.py`, mit dem alle Messreihen bis zum 11.08.2026 aufgenommen wurden (siehe [iot/archiv/README.md](iot/archiv/README.md)) |
+
+Gemessen werden nur noch die Größen, die für die Regelung gebraucht werden:
+der pH-Wert über die Einstabmesskette und die Nährlösungstemperatur für die
+Kompensation. Lufttemperatur, Luftfeuchte und der Kontaktsensor aus dem
+Vorprojekt sind entfallen – sie erfüllten keine Anforderung, gingen in keine
+Entscheidung ein, und der DHT11 lieferte in rund drei Vierteln der Zyklen
+ohnehin keine Daten.
 
 Auf dem Pi entstehen zwei Protokolle neben dem Skript: `hydroponik_log.csv`
 (jede Einzelmessung, alle 10 s) und `dosierungen_log.csv` (Zeitpunkt, Dauer
@@ -93,7 +100,7 @@ nur zeitbegrenzte Läufe, damit die Pumpe bei einem Verbindungsabbruch stoppt.
 | Aktueller pH-Wert | Großanzeige mit Sensorspannung und Bewertung (im/über/unter Zielbereich) |
 | pH-Verlauf | Live-Liniendiagramm mit Zielband, Tooltip, Tastaturbedienung (Pfeiltasten) und Tabellenansicht; „CSV exportieren“ lädt die Messwerte herunter, „Diagramm speichern“ das Bild als PNG |
 | Peristaltikpumpe | Betriebsart, Dosierzähler (gesamt und 24 h), Sperrzeit, Testlauf mit Sekundenangabe, Not-Aus; rote Warnung, wenn die Mengenbegrenzung ausgelöst hat |
-| Weitere Messwerte | Wassertemperatur, Lufttemperatur, Luftfeuchte, Kontaktsensor |
+| Nährlösungstemperatur | Wassertemperatur des Reservoirs, die über die Temperaturkompensation in den angezeigten pH-Wert eingeht |
 
 Die Verbindung läuft über WebSocket und baut sich nach einem Abbruch
 selbstständig neu auf. Zeigt die Kopfzeile „Getrennt“, ist der Node-Server
@@ -331,8 +338,9 @@ pip install -r iot/requirements.txt
 Das Skript [tools/plot_messreihe.py](tools/plot_messreihe.py) erzeugt aus der
 CSV-Logdatei druckfertige Diagramme (PNG, 300 dpi). Es liest sowohl das
 vollständige Log vom Pi (`hydroponik_log.csv`, per `scp` holen) als auch die
-über „CSV exportieren“ aus der Weboberfläche heruntergeladene Datei – beide
-verwenden dieselben Spaltennamen.
+über „CSV exportieren“ aus der Weboberfläche heruntergeladene Datei. Das
+Skript wertet `timestamp`, `ph`, `ph_spannung` und `wasser_temp` aus; weitere
+Spalten stören nicht, sodass auch ältere Messreihen lesbar bleiben.
 
 ### Einrichtung (einmalig, auf dem Windows-Rechner)
 

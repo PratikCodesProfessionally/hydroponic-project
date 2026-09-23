@@ -113,13 +113,8 @@ function render(data) {
     setText('lockout', data.lockoutRemaining === null ? '--' : `${Math.round(data.lockoutRemaining)} s`);
     setText('last-dose', data.lastDose || '--');
 
-    // Begleitmesswerte
+    // Naehrloesungstemperatur (geht ueber die Kompensation in den pH-Wert ein)
     setText('water-temp', num(data.waterTemp, 1, ' °C'));
-    setText('air-temp', num(data.airTemp, 1, ' °C'));
-    setText('air-humidity', num(data.airHumidity, 0, ' %'));
-    setText('moisture', data.moist === null || data.moist === undefined
-        ? '--'
-        : (data.moist ? 'nass' : 'trocken'));
 }
 
 function recordReading(data) {
