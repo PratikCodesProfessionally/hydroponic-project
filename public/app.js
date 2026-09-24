@@ -69,6 +69,25 @@ function setPill(element, variant, icon, text) {
 //   Anzeige der Messwerte
 // ==================================================================
 
+/**
+ * Grenzen des Zielbereichs, bewusst unsymmetrisch zum Sollwert.
+ *
+ * Das Stellglied wirkt nur in eine Richtung, es steht ausschliesslich
+ * pH-Minus zur Verfuegung. Oberhalb von Sollwert + Toleranz dosiert die
+ * Regelung, unterhalb des Sollwertes kann sie nichts ausrichten und muss die
+ * natuerliche Drift abwarten. Angezeigt wird deshalb der Bereich, den die
+ * Anlage tatsaechlich halten kann: vom Sollwert bis zur Eingriffsschwelle,
+ * mit den Vorgabewerten also 5,80 bis 6,00.
+ */
+function zielbereich(target, tolerance) {
+    // tolerance > 0 verlangt: sonst entstuende ein Band der Breite null, in dem
+    // jeder Messwert als ausserhalb gilt. Dann lieber "Kein Zielbereich".
+    if (!Number.isFinite(target) || !Number.isFinite(tolerance) || tolerance <= 0) {
+        return null;
+    }
+    return { unten: target, oben: target + tolerance };
+}
+
 function render(data) {
     current = data;
 
@@ -77,22 +96,20 @@ function render(data) {
     setText('last-update', `Letzte Messung: ${data.timestamp || '--'}`);
 
     // Zielbereich
-    const target = Number(data.target);
-    const tolerance = Number(data.tolerance);
-    const hasBand = Number.isFinite(target) && Number.isFinite(tolerance);
-    setText('target-text', hasBand
-        ? `Zielbereich ${(target - tolerance).toFixed(2)} – ${(target + tolerance).toFixed(2)}`
+    const band = zielbereich(Number(data.target), Number(data.tolerance));
+    setText('target-text', band
+        ? `Zielbereich ${band.unten.toFixed(2)} – ${band.oben.toFixed(2)}`
         : 'Zielbereich --');
 
     // Zustand: Farbe immer zusammen mit Symbol und Text.
     const state = $('ph-state');
     if (data.ph === null || data.ph === undefined) {
         setPill(state, 'critical', '✕', 'Messwert ungültig');
-    } else if (!hasBand) {
+    } else if (!band) {
         setPill(state, 'neutral', '●', 'Kein Zielbereich');
-    } else if (data.ph > target + tolerance) {
+    } else if (data.ph > band.oben) {
         setPill(state, 'warning', '▲', 'Über Zielbereich');
-    } else if (data.ph < target - tolerance) {
+    } else if (data.ph < band.unten) {
         setPill(state, 'warning', '▼', 'Unter Zielbereich');
     } else {
         setPill(state, 'good', '✓', 'Im Zielbereich');
@@ -157,11 +174,10 @@ function svgEl(name, attrs = {}, className = '') {
 
 function yDomain() {
     const values = history.map(point => point.ph);
-    const target = Number(current?.target);
-    const tolerance = Number(current?.tolerance);
+    const band = zielbereich(Number(current?.target), Number(current?.tolerance));
 
-    if (Number.isFinite(target) && Number.isFinite(tolerance)) {
-        values.push(target - tolerance, target + tolerance);
+    if (band) {
+        values.push(band.unten, band.oben);
     }
     if (!values.length) {
         return [5, 7];
@@ -200,17 +216,16 @@ function drawChart() {
     const yOf = (value) => PADDING.top + plotHeight - ((value - minY) / (maxY - minY)) * plotHeight;
 
     // --- Zielbereich als zurueckhaltende Flaeche, mit Textbeschriftung ---
-    const target = Number(current?.target);
-    const tolerance = Number(current?.tolerance);
-    if (Number.isFinite(target) && Number.isFinite(tolerance)) {
-        const top = yOf(target + tolerance);
-        const bottom = yOf(target - tolerance);
+    const band = zielbereich(Number(current?.target), Number(current?.tolerance));
+    if (band) {
+        const top = yOf(band.oben);
+        const bottom = yOf(band.unten);
         chart.append(svgEl('rect', {
             x: PADDING.left, y: top, width: plotWidth, height: Math.max(bottom - top, 1)
         }, 'chart-band'));
         const bandLabel = svgEl('text', { x: PADDING.left + 8, y: top - 5 }, 'chart-band-label');
         bandLabel.textContent =
-            `Zielbereich ${(target - tolerance).toFixed(2)}–${(target + tolerance).toFixed(2)}`;
+            `Zielbereich ${band.unten.toFixed(2)}–${band.oben.toFixed(2)}`;
         chart.append(bandLabel);
     }
 

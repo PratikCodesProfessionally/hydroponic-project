@@ -90,7 +90,7 @@ nur zeitbegrenzte Läufe, damit die Pumpe bei einem Verbindungsabbruch stoppt.
 | `PI_API_BASE_URL` | – | Basis-URL der Pi-API; leer = Demobetrieb |
 | `PI_SENSOR_POLL_INTERVAL_MS` | `2000` | Abfrageintervall zum Pi |
 | `PUMP_MAX_SECONDS` | `10` | Obergrenze je Pumpenlauf (der Pi begrenzt zusätzlich) |
-| `PH_TARGET` / `PH_TOLERANCE` | `5.8` / `0.2` | Zielbereich, falls der Pi ihn nicht mitliefert |
+| `PH_TARGET` / `PH_TOLERANCE` | `5.8` / `0.2` | Sollwert und Toleranz, falls der Pi sie nicht mitliefert; daraus folgt der Zielbereich 5,80 bis 6,00 |
 | `HISTORY_LIMIT` | `43200` | Größe des Verlaufspuffers (≈ 24 h bei 2-s-Takt); Diagramm zeigt die letzten 120 |
 
 ### public/ – das Dashboard
@@ -98,6 +98,7 @@ nur zeitbegrenzte Läufe, damit die Pumpe bei einem Verbindungsabbruch stoppt.
 | Element | Funktion |
 | --- | --- |
 | Aktueller pH-Wert | Großanzeige mit Sensorspannung und Bewertung (im/über/unter Zielbereich) |
+| Zielbereich | 5,80 bis 6,00, also vom Sollwert bis zur Eingriffsschwelle. Bewusst unsymmetrisch: oberhalb von 6,00 dosiert die Regelung, unterhalb von 5,80 kann sie nichts ausrichten, da nur pH-Minus zur Verfügung steht |
 | pH-Verlauf | Live-Liniendiagramm mit Zielband, Tooltip, Tastaturbedienung (Pfeiltasten) und Tabellenansicht; „CSV exportieren“ lädt die Messwerte herunter, „Diagramm speichern“ das Bild als PNG |
 | Peristaltikpumpe | Betriebsart, Dosierzähler (gesamt und 24 h), Sperrzeit, Testlauf mit Sekundenangabe, Not-Aus; rote Warnung, wenn die Mengenbegrenzung ausgelöst hat |
 | Nährlösungstemperatur | Wassertemperatur des Reservoirs, die über die Temperaturkompensation in den angezeigten pH-Wert eingeht |
